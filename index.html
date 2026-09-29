@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MET-Based Activity Calorie Burn Planner</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    .activity-row:hover { background: rgba(99,102,241,0.06); }
+    input[type=range] { accent-color: #6366f1; }
+    .fade-in { animation: fadeIn 0.2s ease; }
+    @keyframes fadeIn { from{opacity:0}to{opacity:1} }
+    .cat-badge { font-size: 0.65rem; }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-violet-50 via-white to-pink-50 min-h-screen font-sans">
+  <header class="bg-white shadow-sm sticky top-0 z-10">
+    <div class="max-w-5xl mx-auto px-4 py-4 flex items-center gap-3">
+      <span class="text-3xl" aria-hidden="true">🏃</span>
+      <div>
+        <h1 class="text-xl font-bold text-gray-900">MET-Based Activity Calorie Burn Planner</h1>
+        <p class="text-sm text-gray-500">Estimate calories burned using MET values for 100+ activities</p>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-4 py-8" role="main">
+    <!-- Profile -->
+    <section class="bg-white rounded-2xl shadow-md p-6 mb-6" aria-label="Body weight and profile">
+      <h2 class="font-semibold text-gray-800 mb-4">Your Profile</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" for="bodyWeight">Body Weight</label>
+          <div class="flex items-center gap-2">
+            <input id="bodyWeight" type="number" value="70" min="20" max="300" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-violet-400 focus:outline-none" aria-label="Body weight" />
+            <select id="weightUnit" class="border border-gray-300 rounded-lg px-2 py-2 focus:ring-2 focus:ring-violet-400 focus:outline-none text-sm" aria-label="Weight unit">
+              <option value="kg">kg</option>
+              <option value="lbs">lbs</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" for="defaultDuration">Default Duration (min)</label>
+          <input id="defaultDuration" type="number" value="30" min="1" max="600" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-violet-400 focus:outline-none" aria-label="Default activity duration in minutes" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Daily Goal (kcal)</label>
+          <input id="dailyGoal" type="number" value="400" min="0" max="2000" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-violet-400 focus:outline-none" aria-label="Daily calorie burn goal" />
+        </div>
+      </div>
+    </section>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Activity Browser -->
+      <div class="lg:col-span-2">
+        <section class="bg-white rounded-2xl shadow-md p-5 mb-5" aria-label="Activity browser">
+          <div class="flex items-center gap-3 mb-4">
+            <input id="searchBox" type="search" placeholder="Search activities..." class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-violet-400 focus:outline-none" aria-label="Search activities" />
+            <select id="catFilter" class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-violet-400 focus:outline-none" aria-label="Filter by category">
+              <option value="">All Categories</option>
+            </select>
+          </div>
+          <div id="activityList" class="max-h-96 overflow-y-auto divide-y divide-gray-100" role="list" aria-label="Activity list"></div>
+        </section>
+      </div>
+
+      <!-- Session Log -->
+      <div>
+        <section class="bg-white rounded-2xl shadow-md p-5 mb-5" aria-label="Today's session log">
+          <h2 class="font-semibold text-gray-800 mb-3">Today's Session</h2>
+          <!-- Goal Ring -->
+          <div class="flex justify-center mb-4">
+            <div class="relative w-28 h-28">
+              <svg width="112" height="112" viewBox="0 0 100 100" style="transform:rotate(-90deg)" role="img" aria-label="Daily goal progress ring">
+                <circle cx="50" cy="50" r="42" fill="none" stroke="#e5e7eb" stroke-width="10" />
+                <circle id="goalRing" cx="50" cy="50" r="42" fill="none" stroke="#8b5cf6" stroke-width="10" stroke-linecap="round" stroke-dasharray="263.9" stroke-dashoffset="263.9" style="transition:stroke-dashoffset 0.4s" />
+              </svg>
+              <div class="absolute inset-0 flex flex-col items-center justify-center">
+                <span id="totalCalBig" class="text-xl font-bold text-violet-700">0</span>
+                <span class="text-xs text-gray-400">kcal</span>
+              </div>
+            </div>
+          </div>
+          <div id="goalProgressText" class="text-center text-xs text-gray-500 mb-4"></div>
+          <div id="sessionLog" class="space-y-2 max-h-72 overflow-y-auto" role="list" aria-label="Session activities log"></div>
+          <div id="emptyLog" class="text-center text-gray-400 text-sm py-8">No activities added yet. Click + to add from the list.</div>
+          <div class="flex gap-2 mt-3">
+            <button id="clearSessionBtn" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 py-2 rounded-lg text-xs font-medium transition focus:outline-none focus:ring-2 focus:ring-gray-400" aria-label="Clear session">Clear</button>
+            <button id="saveSessionBtn" class="flex-1 bg-violet-600 hover:bg-violet-700 text-white py-2 rounded-lg text-xs font-medium transition focus:outline-none focus:ring-2 focus:ring-violet-400" aria-label="Save session to history">Save Session</button>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- History -->
+    <section class="bg-white rounded-2xl shadow-md p-5 mb-5" aria-label="Session history and chart">
+      <h2 class="font-semibold text-gray-800 mb-4">History</h2>
+      <div id="historyList" class="space-y-2 mb-5 max-h-48 overflow-y-auto">
+        <p class="text-gray-400 text-sm" id="noHistory">No history yet.</p>
+      </div>
+      <canvas id="historyChart" role="img" aria-label="Calorie burn history chart" height="80"></canvas>
+    </section>
+  </main>
+
+  <!-- Add to session modal -->
+  <div id="addModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50" role="dialog" aria-modal="true" aria-label="Add activity to session">
+    <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4">
+      <h3 class="font-bold text-gray-800 mb-1" id="modalActivityName"></h3>
+      <p class="text-sm text-gray-500 mb-4">MET value: <span id="modalMET" class="font-semibold text-violet-700"></span></p>
+      <label class="block text-sm font-medium text-gray-700 mb-1" for="modalDuration">Duration (minutes)</label>
+      <input id="modalDuration" type="number" min="1" max="600" class="w-full border border-gray-300 rounded-xl px-3 py-2 text-lg text-center focus:ring-2 focus:ring-violet-400 focus:outline-none mb-3" aria-label="Duration in minutes" />
+      <div class="text-center text-2xl font-bold text-violet-700 mb-4" id="modalCalc">0 kcal</div>
+      <div class="flex gap-3">
+        <button id="modalCancel" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 rounded-xl font-semibold transition focus:outline-none focus:ring-2 focus:ring-gray-400" aria-label="Cancel">Cancel</button>
+        <button id="modalAdd" class="flex-1 bg-violet-600 hover:bg-violet-700 text-white py-2 rounded-xl font-semibold transition focus:outline-none focus:ring-2 focus:ring-violet-400" aria-label="Add activity">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const ACTIVITIES = [
+      {name:'Walking (2 mph, slow)',cat:'Walking',met:2.3},{name:'Walking (3 mph)',cat:'Walking',met:3.0},{name:'Walking (4 mph, brisk)',cat:'Walking',met:4.3},{name:'Hiking (cross-country)',cat:'Walking',met:6.0},{name:'Walking upstairs',cat:'Walking',met:8.0},
+      {name:'Running (5 mph)',cat:'Running',met:8.3},{name:'Running (6 mph)',cat:'Running',met:9.8},{name:'Running (7 mph)',cat:'Running',met:11.0},{name:'Running (8 mph)',cat:'Running',met:11.8},{name:'Running (10 mph)',cat:'Running',met:14.5},{name:'Jogging (general)',cat:'Running',met:7.0},{name:'Trail running',cat:'Running',met:9.0},
+      {name:'Cycling (< 10 mph, leisure)',cat:'Cycling',met:4.0},{name:'Cycling (10–12 mph)',cat:'Cycling',met:6.8},{name:'Cycling (12–14 mph)',cat:'Cycling',met:8.0},{name:'Cycling (14–16 mph)',cat:'Cycling',met:10.0},{name:'Cycling (> 16 mph)',cat:'Cycling',met:12.0},{name:'Mountain biking',cat:'Cycling',met:8.5},{name:'Stationary bike (moderate)',cat:'Cycling',met:5.5},
+      {name:'Swimming (leisure)',cat:'Swimming',met:5.8},{name:'Swimming laps (moderate)',cat:'Swimming',met:7.0},{name:'Swimming laps (vigorous)',cat:'Swimming',met:10.0},{name:'Backstroke',cat:'Swimming',met:7.0},{name:'Breaststroke',cat:'Swimming',met:10.3},{name:'Butterfly stroke',cat:'Swimming',met:13.8},{name:'Water polo',cat:'Swimming',met:10.0},
+      {name:'Yoga (general)',cat:'Yoga & Flexibility',met:2.5},{name:'Hatha yoga',cat:'Yoga & Flexibility',met:2.5},{name:'Power yoga / Vinyasa',cat:'Yoga & Flexibility',met:4.0},{name:'Hot yoga (Bikram)',cat:'Yoga & Flexibility',met:5.0},{name:'Stretching (general)',cat:'Yoga & Flexibility',met:2.3},{name:'Pilates (general)',cat:'Yoga & Flexibility',met:3.0},
+      {name:'Weight lifting (general)',cat:'Strength',met:3.5},{name:'Weight lifting (vigorous)',cat:'Strength',met:6.0},{name:'Bodyweight exercises (pushups etc.)',cat:'Strength',met:3.8},{name:'CrossFit (general)',cat:'Strength',met:9.0},{name:'Kettlebell training',cat:'Strength',met:9.8},{name:'Circuit training',cat:'Strength',met:8.0},
+      {name:'Basketball (game)',cat:'Sports',met:8.0},{name:'Soccer (general)',cat:'Sports',met:7.0},{name:'Tennis (general)',cat:'Sports',met:7.3},{name:'Tennis (singles)',cat:'Sports',met:8.0},{name:'Volleyball (competitive)',cat:'Sports',met:8.0},{name:'Badminton',cat:'Sports',met:5.5},{name:'Table tennis',cat:'Sports',met:4.0},{name:'Baseball/softball',cat:'Sports',met:5.0},{name:'Golf (walking)',cat:'Sports',met:4.8},{name:'Golf (riding cart)',cat:'Sports',met:3.5},
+      {name:'Rope jumping (slow)',cat:'Cardio',met:8.8},{name:'Rope jumping (fast)',cat:'Cardio',met:12.3},{name:'Rowing machine (moderate)',cat:'Cardio',met:7.0},{name:'Elliptical trainer (moderate)',cat:'Cardio',met:5.0},{name:'Stair climber (machine)',cat:'Cardio',met:8.8},{name:'Aerobics (general)',cat:'Cardio',met:6.0},{name:'High-intensity aerobics',cat:'Cardio',met:8.0},{name:'Step aerobics',cat:'Cardio',met:8.5},{name:'Dance (general)',cat:'Cardio',met:5.5},{name:'Zumba',cat:'Cardio',met:6.5},{name:'HIIT (general)',cat:'Cardio',met:10.0},
+      {name:'Martial arts (general)',cat:'Martial Arts',met:10.0},{name:'Boxing (sparring)',cat:'Martial Arts',met:9.0},{name:'Judo / Jiu-jitsu',cat:'Martial Arts',met:10.0},{name:'Kickboxing',cat:'Martial Arts',met:10.3},{name:'Karate (practice)',cat:'Martial Arts',met:6.5},{name:'Wrestling',cat:'Martial Arts',met:8.0},
+      {name:'Rock climbing (ascending)',cat:'Outdoor',met:8.0},{name:'Rock climbing (rappelling)',cat:'Outdoor',met:5.0},{name:'Kayaking',cat:'Outdoor',met:5.0},{name:'Canoeing (moderate)',cat:'Outdoor',met:5.8},{name:'Surfing',cat:'Outdoor',met:3.0},{name:'Skateboarding',cat:'Outdoor',met:5.0},{name:'Rollerblading',cat:'Outdoor',met:7.5},{name:'Cross-country skiing',cat:'Outdoor',met:9.0},{name:'Downhill skiing',cat:'Outdoor',met:5.3},{name:'Snowboarding',cat:'Outdoor',met:5.3},
+      {name:'Gardening (general)',cat:'Everyday',met:3.5},{name:'Mowing lawn (walk behind)',cat:'Everyday',met:5.0},{name:'House cleaning (general)',cat:'Everyday',met:3.5},{name:'Cooking',cat:'Everyday',met:2.0},{name:'Food shopping',cat:'Everyday',met:2.3},{name:'Raking lawn',cat:'Everyday',met:4.0},{name:'Shoveling snow',cat:'Everyday',met:5.3},{name:'Moving furniture',cat:'Everyday',met:5.8},{name:'Playing with kids',cat:'Everyday',met:4.0},
+      {name:'Sex (moderate effort)',cat:'Everyday',met:1.8},{name:'Standing (light work)',cat:'Everyday',met:2.0},{name:'Sitting (office work)',cat:'Everyday',met:1.5},
+      {name:'Ballet / barre',cat:'Dance',met:6.0},{name:'Ballroom dance',cat:'Dance',met:3.0},{name:'Hip hop dance',cat:'Dance',met:6.5},{name:'Salsa / Latin dance',cat:'Dance',met:6.0},{name:'Tap dance',cat:'Dance',met:5.0},
+    ];
+
+    const catColors = {Walking:'bg-green-100 text-green-700',Running:'bg-red-100 text-red-700',Cycling:'bg-blue-100 text-blue-700',Swimming:'bg-cyan-100 text-cyan-700','Yoga & Flexibility':'bg-purple-100 text-purple-700',Strength:'bg-orange-100 text-orange-700',Sports:'bg-yellow-100 text-yellow-700',Cardio:'bg-pink-100 text-pink-700','Martial Arts':'bg-gray-200 text-gray-700',Outdoor:'bg-teal-100 text-teal-700',Everyday:'bg-indigo-100 text-indigo-700',Dance:'bg-rose-100 text-rose-700'};
+
+    // Populate categories
+    const cats = [...new Set(ACTIVITIES.map(a=>a.cat))].sort();
+    const catFilter = document.getElementById('catFilter');
+    cats.forEach(c => { const o = document.createElement('option'); o.value=c; o.textContent=c; catFilter.appendChild(o); });
+
+    let session = [];
+    let historyChart = null;
+
+    function getWeightKg() {
+      const w = parseFloat(document.getElementById('bodyWeight').value) || 70;
+      const unit = document.getElementById('weightUnit').value;
+      return unit === 'lbs' ? w * 0.453592 : w;
+    }
+
+    function calcCal(met, durationMin, weightKg) {
+      return Math.round(met * weightKg * (durationMin / 60));
+    }
+
+    function renderActivities() {
+      const search = document.getElementById('searchBox').value.toLowerCase();
+      const cat = document.getElementById('catFilter').value;
+      const list = document.getElementById('activityList');
+      list.innerHTML = '';
+
+      const filtered = ACTIVITIES.filter(a => {
+        const matchSearch = a.name.toLowerCase().includes(search);
+        const matchCat = !cat || a.cat === cat;
+        return matchSearch && matchCat;
+      });
+
+      if (filtered.length === 0) {
+        const p = document.createElement('p');
+        p.className = 'text-gray-400 text-sm text-center py-8';
+        p.textContent = 'No activities found.';
+        list.appendChild(p);
+        return;
+      }
+
+      const weightKg = getWeightKg();
+      const dur = parseInt(document.getElementById('defaultDuration').value) || 30;
+
+      filtered.forEach(activity => {
+        const cal = calcCal(activity.met, dur, weightKg);
+        const row = document.createElement('div');
+        row.className = 'activity-row flex items-center justify-between px-2 py-2.5 cursor-pointer rounded-lg';
+        row.setAttribute('role', 'listitem');
+        row.setAttribute('tabindex', '0');
+        row.setAttribute('aria-label', activity.name + ' MET ' + activity.met + ' ' + cal + ' calories');
+
+        const left = document.createElement('div');
+        left.className = 'flex items-center gap-2 min-w-0';
+
+        const badge = document.createElement('span');
+        badge.className = 'cat-badge px-2 py-0.5 rounded-full font-medium flex-shrink-0 ' + (catColors[activity.cat] || 'bg-gray-100 text-gray-600');
+        badge.textContent = activity.cat;
+
+        const name = document.createElement('span');
+        name.className = 'text-sm text-gray-800 truncate';
+        name.textContent = activity.name;
+
+        left.append(badge, name);
+
+        const right = document.createElement('div');
+        right.className = 'flex items-center gap-3 flex-shrink-0 ml-3';
+
+        const metSpan = document.createElement('span');
+        metSpan.className = 'text-xs text-gray-400 hidden sm:block';
+        metSpan.textContent = 'MET ' + activity.met;
+
+        const calSpan = document.createElement('span');
+        calSpan.className = 'text-sm font-semibold text-violet-700 w-16 text-right';
+        calSpan.textContent = cal + ' kcal';
+
+        const addBtn = document.createElement('button');
+        addBtn.className = 'bg-violet-100 hover:bg-violet-200 text-violet-700 rounded-lg px-2 py-1 text-xs font-bold transition focus:outline-none focus:ring-2 focus:ring-violet-400';
+        addBtn.textContent = '+';
+        addBtn.setAttribute('aria-label', 'Add ' + activity.name);
+        addBtn.addEventListener('click', (e) => { e.stopPropagation(); openModal(activity); });
+
+        right.append(metSpan, calSpan, addBtn);
+        row.append(left, right);
+        row.addEventListener('click', () => openModal(activity));
+        row.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openModal(activity); } });
+        list.appendChild(row);
+      });
+    }
+
+    let modalActivity = null;
+
+    function openModal(activity) {
+      modalActivity = activity;
+      document.getElementById('modalActivityName').textContent = activity.name;
+      document.getElementById('modalMET').textContent = activity.met;
+      document.getElementById('modalDuration').value = document.getElementById('defaultDuration').value;
+      updateModalCalc();
+      document.getElementById('addModal').classList.remove('hidden');
+      document.getElementById('modalDuration').focus();
+    }
+
+    function updateModalCalc() {
+      if (!modalActivity) return;
+      const dur = parseInt(document.getElementById('modalDuration').value) || 0;
+      const cal = calcCal(modalActivity.met, dur, getWeightKg());
+      document.getElementById('modalCalc').textContent = cal + ' kcal';
+    }
+
+    document.getElementById('modalDuration').addEventListener('input', updateModalCalc);
+    document.getElementById('modalCancel').addEventListener('click', () => { document.getElementById('addModal').classList.add('hidden'); });
+
+    document.getElementById('addModal').addEventListener('click', function(e) {
+      if (e.target === this) this.classList.add('hidden');
+    });
+
+    document.getElementById('addModal').addEventListener('keydown', e => {
+      if (e.key === 'Escape') document.getElementById('addModal').classList.add('hidden');
+    });
+
+    document.getElementById('modalAdd').addEventListener('click', () => {
+      if (!modalActivity) return;
+      const dur = parseInt(document.getElementById('modalDuration').value) || 0;
+      if (dur <= 0) return;
+      const cal = calcCal(modalActivity.met, dur, getWeightKg());
+      session.push({ name: modalActivity.name, met: modalActivity.met, cat: modalActivity.cat, dur, cal });
+      document.getElementById('addModal').classList.add('hidden');
+      renderSession();
+    });
+
+    function renderSession() {
+      const log = document.getElementById('sessionLog');
+      const empty = document.getElementById('emptyLog');
+      log.innerHTML = '';
+
+      if (session.length === 0) {
+        empty.classList.remove('hidden');
+        updateGoalRing(0);
+        return;
+      }
+      empty.classList.add('hidden');
+
+      let total = 0;
+      session.forEach((item, i) => {
+        total += item.cal;
+        const row = document.createElement('div');
+        row.className = 'flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2 fade-in';
+        row.setAttribute('role', 'listitem');
+
+        const left = document.createElement('div');
+        const name = document.createElement('div');
+        name.className = 'text-sm font-medium text-gray-800 truncate max-w-36';
+        name.textContent = item.name;
+        const sub = document.createElement('div');
+        sub.className = 'text-xs text-gray-400';
+        sub.textContent = item.dur + ' min · MET ' + item.met;
+        left.append(name, sub);
+
+        const right = document.createElement('div');
+        right.className = 'flex items-center gap-2';
+        const cal = document.createElement('span');
+        cal.className = 'text-sm font-bold text-violet-700';
+        cal.textContent = item.cal + ' kcal';
+        const rb = document.createElement('button');
+        rb.textContent = '✕';
+        rb.className = 'text-gray-400 hover:text-red-500 font-bold focus:outline-none focus:ring-2 focus:ring-red-400 rounded text-sm';
+        rb.setAttribute('aria-label', 'Remove ' + item.name);
+        rb.addEventListener('click', () => { session.splice(i, 1); renderSession(); });
+        right.append(cal, rb);
+        row.append(left, right);
+        log.appendChild(row);
+      });
+
+      document.getElementById('totalCalBig').textContent = total;
+      updateGoalRing(total);
+    }
+
+    function updateGoalRing(total) {
+      const goal = parseInt(document.getElementById('dailyGoal').value) || 400;
+      const pct = Math.min(1, total / goal);
+      const offset = 263.9 * (1 - pct);
+      document.getElementById('goalRing').style.strokeDashoffset = offset;
+      const goalText = document.getElementById('goalProgressText');
+      goalText.textContent = total + ' / ' + goal + ' kcal goal (' + Math.round(pct*100) + '%)';
+      goalText.className = 'text-center text-xs mb-4 ' + (pct >= 1 ? 'text-green-600 font-semibold' : 'text-gray-500');
+    }
+
+    document.getElementById('clearSessionBtn').addEventListener('click', () => {
+      session = [];
+      renderSession();
+    });
+
+    document.getElementById('saveSessionBtn').addEventListener('click', () => {
+      if (session.length === 0) return;
+      const total = session.reduce((s,i)=>s+i.cal,0);
+      const entry = {
+        date: new Date().toLocaleDateString(),
+        time: new Date().toLocaleTimeString(),
+        total,
+        items: session.map(s=>s.name + ' ' + s.dur + 'min'),
+      };
+      let history = [];
+      try { history = JSON.parse(localStorage.getItem('met_history_v1') || '[]'); } catch(e) {}
+      history.unshift(entry);
+      if (history.length > 30) history.pop();
+      localStorage.setItem('met_history_v1', JSON.stringify(history));
+      session = [];
+      renderSession();
+      renderHistory();
+    });
+
+    function renderHistory() {
+      let history = [];
+      try { history = JSON.parse(localStorage.getItem('met_history_v1') || '[]'); } catch(e) {}
+      const list = document.getElementById('historyList');
+      list.innerHTML = '';
+      const noHist = document.getElementById('noHistory');
+
+      if (history.length === 0) {
+        if (!noHist) {
+          const p = document.createElement('p');
+          p.id = 'noHistory';
+          p.className = 'text-gray-400 text-sm';
+          p.textContent = 'No history yet.';
+          list.appendChild(p);
+        } else {
+          list.appendChild(noHist);
+        }
+        return;
+      }
+
+      history.forEach(h => {
+        const row = document.createElement('div');
+        row.className = 'flex items-start justify-between bg-gray-50 rounded-xl px-3 py-2 text-sm';
+        const left = document.createElement('div');
+        const dateEl = document.createElement('div');
+        dateEl.className = 'font-medium text-gray-700';
+        dateEl.textContent = h.date + ' ' + h.time;
+        const itemsEl = document.createElement('div');
+        itemsEl.className = 'text-xs text-gray-400';
+        itemsEl.textContent = (h.items || []).slice(0,3).join(', ') + (h.items.length > 3 ? '...' : '');
+        left.append(dateEl, itemsEl);
+        const cal = document.createElement('span');
+        cal.className = 'font-bold text-violet-700 flex-shrink-0 ml-3';
+        cal.textContent = h.total + ' kcal';
+        row.append(left, cal);
+        list.appendChild(row);
+      });
+
+      // Chart
+      const labels = history.slice(0,10).reverse().map(h => h.date);
+      const data = history.slice(0,10).reverse().map(h => h.total);
+      if (historyChart) historyChart.destroy();
+      const ctx = document.getElementById('historyChart').getContext('2d');
+      historyChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: 'kcal burned',
+            data,
+            backgroundColor: '#8b5cf6',
+            borderRadius: 8,
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ' + ctx.parsed.y + ' kcal' } } },
+          scales: { y: { beginAtZero: true } }
+        }
+      });
+    }
+
+    // Event listeners
+    document.getElementById('searchBox').addEventListener('input', renderActivities);
+    document.getElementById('catFilter').addEventListener('change', renderActivities);
+    document.getElementById('bodyWeight').addEventListener('change', renderActivities);
+    document.getElementById('weightUnit').addEventListener('change', renderActivities);
+    document.getElementById('defaultDuration').addEventListener('change', renderActivities);
+    document.getElementById('dailyGoal').addEventListener('change', () => updateGoalRing(session.reduce((s,i)=>s+i.cal,0)));
+
+    renderActivities();
+    renderSession();
+    renderHistory();
+  </script>
+</body>
+</html>
